@@ -28,6 +28,7 @@ angular.module("umbraco").controller("Umbraco.Community.Contentment.DataEditors.
             allowEdit: 1,
             allowRemove: 1,
             contentBlockTypes: [],
+            reusableContent: [],
             disableSorting: 0,
             displayMode: "blocks",
             enableDevMode: 0,
@@ -153,6 +154,7 @@ angular.module("umbraco").controller("Umbraco.Community.Contentment.DataEditors.
             editorService.open({
                 config: {
                     elementTypes: config.contentBlockTypes,
+                    reusableItems: config.reusableContent,
                     enableFilter: config.enableFilter,
                     currentPage: config.currentPage,
                     currentPageId: config.currentPageId,
@@ -306,6 +308,10 @@ angular.module("umbraco").controller("Umbraco.Community.Contentment.DataEditors.
         };
 
         function populateName(item, $index) {
+
+            if (item.hasOwnProperty("name") === true) {
+                return item.name;
+            }
 
             var name = "";
 
