@@ -263,7 +263,8 @@ angular.module("umbraco").controller("Umbraco.Community.Contentment.DataEditors.
 
                 var item = $scope.model.value[$index];
 
-                if (config.elementTypeLookup[item.elementType].previewEnabled) {
+                if (config.elementTypeLookup.hasOwnProperty(item.elementType) === true &&
+                    config.elementTypeLookup[item.elementType].previewEnabled) {
 
                     vm.previews[item.key] = { loading: true };
 
