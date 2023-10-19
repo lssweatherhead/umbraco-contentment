@@ -12,14 +12,15 @@ angular.module("umbraco").controller("Umbraco.Community.Contentment.DataEditors.
     "contentResource",
     "editorService",
     "editorState",
+    "entityResource",
     "localizationService",
     "notificationsService",
     "overlayService",
     "umbRequestHelper",
     "Umbraco.Community.Contentment.Services.DevMode",
-    function ($scope, $q, $http, $interpolate, clipboardService, contentResource, editorService, editorState, localizationService, notificationsService, overlayService, umbRequestHelper, devModeService) {
+    function ($scope, $q, $http, $interpolate, clipboardService, contentResource, editorService, editorState, entityResource, localizationService, notificationsService, overlayService, umbRequestHelper, devModeService) {
 
-        // console.log("content-blocks.model", $scope.model);
+        //console.log("content-blocks.model", $scope.model);
 
         var defaultConfig = {
             addButtonLabelKey: "grid_addElement",
@@ -48,7 +49,7 @@ angular.module("umbraco").controller("Umbraco.Community.Contentment.DataEditors.
             config.currentPage = $scope.node || editorState.getCurrent();
             config.currentPageId = config.currentPage.id > 0 ? config.currentPage.id : config.currentPage.parentId;
 
-            // Support Content not in Content / Media Tree
+            // Supports content that is not in Content/Media tree.
             if (!config.currentPageId) {
                 config.currentPageId = -1;
             }
@@ -63,8 +64,14 @@ angular.module("umbraco").controller("Umbraco.Community.Contentment.DataEditors.
                 $scope.model.value = [$scope.model.value];
             }
 
-            config.elementTypeScaffoldCache = {}; // because, reasons! ¯\_(ツ)_/¯
+            if (Number.isInteger(config.maxItems) === false) {
+                config.maxItems = Number.parseInt(config.maxItems) || defaultConfig.maxItems;
+            }
+
+            config.elementTypeScaffoldCache = {};
             config.elementTypeLookup = {};
+            config.documentLookup = {};
+            config.missingItem = { name: "This content is not supported for this configuration.", icon: "icon-alert" };
             config.nameTemplates = {};
 
             config.contentBlockTypes.forEach(blockType => {
@@ -72,30 +79,61 @@ angular.module("umbraco").controller("Umbraco.Community.Contentment.DataEditors.
                 config.nameTemplates[blockType.key] = $interpolate(blockType.nameTemplate || "Item {{ $index }}");
             });
 
+            localizationService.localizeMany(["contentment_missingElementType"]).then(data => {
+                config.missingItem.name = data[0];
+            });
+
             vm.addButtonLabelKey = config.addButtonLabelKey || "grid_addElement";
             vm.displayMode = config.displayMode;
 
             vm.enablePreview = Object.toBoolean(config.enablePreview);
 
-            vm.allowAdd = (config.maxItems === 0 || config.maxItems === "0") || $scope.model.value.length < config.maxItems;
+            vm.allowAdd = config.maxItems === 0 || $scope.model.value.length < config.maxItems;
             vm.allowCopy = Object.toBoolean(config.allowCopy) && clipboardService.isSupported();
             vm.allowEdit = Object.toBoolean(config.allowEdit);
             vm.allowRemove = Object.toBoolean(config.allowRemove);
-            vm.allowSort = Object.toBoolean(config.disableSorting) === false && (config.maxItems !== 1 && config.maxItems !== "1");
+            vm.allowSort = Object.toBoolean(config.disableSorting) === false && config.maxItems !== 1;
 
             vm.add = add;
             vm.copy = copy;
             vm.edit = edit;
             vm.remove = remove;
-            vm.populateIcon = populateIcon;
-            vm.populateName = populateName;
+            vm.populate = populate;
             vm.sort = () => populatePreviews();
 
+            vm.disabled = {};
             vm.previews = [];
-            vm.blockActions = [];
+            vm.blockActions = {};
+
+            var documents = [];
 
             for (var i = 0; i < $scope.model.value.length; i++) {
-                vm.blockActions.push(actionsFactory(i));
+                var item = $scope.model.value[i];
+
+                if (isDocument(item) === true) {
+                    documents.push(item.udi);
+                }
+
+                if (config.elementTypeLookup.hasOwnProperty(item.elementType) === true) {
+
+                    vm.blockActions[item.key] = actionsFactory(i);
+
+                } else if (isDocument(item) === false) {
+
+                    vm.disabled[item.key] = true;
+
+                }
+            }
+
+            if (documents.length > 0) {
+                entityResource.getByIds(documents, "Document").then(nodes => {
+                    nodes.forEach(node => {
+                        if (node.trashed === true || node.metaData.IsPublished === false) {
+                            vm.disabled[node.key] = true;
+                        }
+                        config.documentLookup[node.key] = node;
+                    });
+                });
             }
 
             populatePreviews();
@@ -164,15 +202,27 @@ angular.module("umbraco").controller("Umbraco.Community.Contentment.DataEditors.
                 view: config.overlayView,
                 submit: function (model) {
 
+                    //console.log("content-blocks.add.submit", model);
+
                     $scope.model.value.push(model);
 
-                    var idx = $scope.model.value.length - 1;
+                    if (isDocument(model) === true) {
 
-                    vm.blockActions.push(actionsFactory(idx));
+                        entityResource.getById(model.key, "Document").then(node => {
+                            if (node.trashed === true || node.metaData.IsPublished === false) {
+                                vm.disabled[node.key] = true;
+                            }
+                            config.documentLookup[node.key] = node;
+                        });
 
-                    preview(idx);
+                    } else {
 
-                    if ((config.maxItems !== 0 && config.maxItems !== "0") && $scope.model.value.length >= config.maxItems) {
+                        var idx = $scope.model.value.length - 1;
+                        vm.blockActions[model.key] = actionsFactory(idx);
+                        preview(idx);
+                    }
+
+                    if (config.maxItems !== 0 && $scope.model.value.length >= config.maxItems) {
                         vm.allowAdd = false;
                     }
 
@@ -189,6 +239,11 @@ angular.module("umbraco").controller("Umbraco.Community.Contentment.DataEditors.
         function copy($index) {
 
             var item = $scope.model.value[$index];
+
+            if (isDocument(item) === true) {
+                return;
+            }
+
             var elementType = config.elementTypeLookup[item.elementType];
             var name = populateName(item, $index);
 
@@ -232,30 +287,62 @@ angular.module("umbraco").controller("Umbraco.Community.Contentment.DataEditors.
         function edit($index) {
 
             var item = $scope.model.value[$index];
-            var elementType = config.elementTypeLookup[item.elementType];
 
-            editorService.open({
-                config: {
-                    elementType: elementType,
-                    currentPageId: config.currentPageId,
-                },
-                size: elementType.overlaySize,
-                value: item,
-                view: config.overlayView,
-                submit: function (model) {
+            if (isDocument(item) === true) {
+                editorService.contentEditor({
+                    id: item.key,
+                    close: function () {
+                        //console.log("content-blocks.edit.close");
+                        entityResource.getById(item.key, "Document").then(node => {
+                            if (node.trashed === true || node.metaData.IsPublished === false) {
+                                vm.disabled[node.key] = true;
+                            } else if (vm.disabled.hasOwnProperty(node.key) == true && (node.trashed === false || node.metaData.IsPublished === true)) {
+                                delete vm.disabled[node.key];
+                            }
 
-                    $scope.model.value[$index] = model;
+                            config.documentLookup[node.key] = node;
 
-                    preview($index);
+                            editorService.close();
+                        });
+                    }
+                });
 
-                    setDirty();
+            } else if (config.elementTypeLookup.hasOwnProperty(item.elementType) === true) {
 
-                    editorService.close();
-                },
-                close: function () {
-                    editorService.close();
-                }
-            });
+                var elementType = config.elementTypeLookup[item.elementType];
+
+                editorService.open({
+                    config: {
+                        elementType: elementType,
+                        currentPageId: config.currentPageId,
+                    },
+                    size: elementType.overlaySize || "large",
+                    value: item,
+                    view: config.overlayView,
+                    submit: function (model) {
+
+                        $scope.model.value[$index] = model;
+
+                        preview($index);
+
+                        setDirty();
+
+                        editorService.close();
+                    },
+                    close: function () {
+                        editorService.close();
+                    }
+                });
+
+            } else {
+
+                devModeService.editValue(item);
+
+            }
+        };
+
+        function isDocument(item) {
+            return item.udi && item.udi.startsWith("umb://document/") === true
         };
 
         function preview($index) {
@@ -295,20 +382,47 @@ angular.module("umbraco").controller("Umbraco.Community.Contentment.DataEditors.
             }
         };
 
+        function populate(item, $index, propertyName) {
+            switch (propertyName) {
+                case "disabled":
+                    return vm.disabled.hasOwnProperty(item.key) == true;
+                case "icon":
+                    return populateIcon(item, $index);
+                case "name":
+                    return populateName(item, $index);
+                default:
+                    return item.hasOwnProperty(propertyName) === true ? item[propertyName] : undefined;
+            }
+        };
+
         function populateIcon(item, $index) {
+
+            // check that the element type exists, if not then return the missing icon.
+            if (config.elementTypeLookup.hasOwnProperty(item.elementType) === false && isDocument(item) === false && config.missingItem) {
+                return config.missingItem.icon;
+            }
 
             if (item.hasOwnProperty("icon") === true) {
                 return item.icon;
             }
 
-            if (item.elementType) {
+            if (config.elementTypeLookup.hasOwnProperty(item.elementType) === true) {
                 return config.elementTypeLookup[item.elementType].icon;
+            }
+
+            if (config.documentLookup.hasOwnProperty(item.key) === true) {
+                return config.documentLookup[item.key].icon;
             }
 
             return "icon-document";
         };
 
         function populateName(item, $index) {
+
+            // check that the element type exists, if not then return the missing label.
+            if (config.elementTypeLookup.hasOwnProperty(item.elementType) === false && isDocument(item) === false && config.missingItem) {
+                return config.missingItem.name;
+            }
 
             if (item.hasOwnProperty("name") === true) {
                 return item.name;
@@ -324,9 +438,13 @@ angular.module("umbraco").controller("Umbraco.Community.Contentment.DataEditors.
                 name = expression(item.value);
                 delete item.value.$index;
 
-            } else {
+            } else if (config.elementTypeLookup.hasOwnProperty(item.elementType) === true) {
 
                 name = config.elementTypeLookup[item.elementType].name;
+
+            } else if (config.documentLookup.hasOwnProperty(item.key) === true) {
+
+                name = config.documentLookup[item.key].name;
 
             }
 
@@ -343,14 +461,15 @@ angular.module("umbraco").controller("Umbraco.Community.Contentment.DataEditors.
                     submitButtonLabel: data[3],
                     submitButtonStyle: "danger",
                     submit: function () {
+                        var item = $scope.model.value[$index];
 
                         $scope.model.value.splice($index, 1);
 
-                        vm.blockActions.pop();
+                        delete vm.blockActions[item.key];
 
                         populatePreviews();
 
-                        if ((config.maxItems === 0 || config.maxItems === "0") || $scope.model.value.length < config.maxItems) {
+                        if (config.maxItems === 0 || $scope.model.value.length < config.maxItems) {
                             vm.allowAdd = true;
                         }
 

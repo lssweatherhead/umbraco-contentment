@@ -87,17 +87,20 @@ namespace Umbraco.Community.Contentment.DataEditors
                 {
                     Key = "reusableContent",
                     Name = "Reusable Content",
-                    NameTemplate = "{{name}}",
                     Description = default,
-                    DescriptionTemplate = "{{description}}",
                     Icon = UmbConstants.Icons.ContentType,
-                    IconTemplate = "{{icon}}",
+                    Expressions = new Dictionary<string, string>
+                    {
+                        { "name", "{{ name }}" },
+                        { "description", "{{ description }}" },
+                        { "icon", "{{icon}}" },
+                    },
                     DefaultValues = new Dictionary<string, object>
                     {
                         { "icon", UmbConstants.Icons.ContentType },
-                        { "nameTemplate", "{{ udi | ncNodeName }}" },
-                        { "overlaySize", "small" },
-                        { "enablePreview", Constants.Values.False },
+                        //{ "nameTemplate", "{{ udi | ncNodeName }}" },
+                        //{ "overlaySize", "small" },
+                        //{ "enablePreview", Constants.Values.False },
                     },
                     Fields = new[]
                     {
@@ -129,37 +132,37 @@ namespace Umbraco.Community.Contentment.DataEditors
                             Description = "Set a parent node to use its child nodes as reusable content.",
                             View =  ioHelper.ResolveRelativeOrVirtualUrl(ContentPickerDataEditor.DataEditorSourceViewPath),
                         },
-                        new ConfigurationField
-                        {
-                            Key = "nameTemplate",
-                            Name = "Name template",
-                            Description = "Enter an AngularJS expression to evaluate against each block for its name.",
-                            View = "textstring",
-                        },
-                        new ConfigurationField
-                        {
-                            Key = "overlaySize",
-                            Name = "Editor overlay size",
-                            Description = "Select the size of the overlay editing panel. By default this is set to 'small'. However if the editor fields require a wider panel, please select 'medium' or 'large'.",
-                            View = _ioHelper.ResolveRelativeOrVirtualUrl(RadioButtonListDataListEditor.DataEditorViewPath),
-                            Config = new Dictionary<string, object>
-                            {
-                                { Constants.Conventions.ConfigurationFieldAliases.Items, new[]
-                                    {
-                                        new DataListItem { Name = "Small", Value = "small" },
-                                        new DataListItem { Name = "Medium", Value = "medium" },
-                                        new DataListItem { Name = "Large", Value = "large" }
-                                    }
-                                }
-                            }
-                        },
-                        new ConfigurationField
-                        {
-                            Key = "enablePreview",
-                            Name = "Enable preview?",
-                            Description = "Select to enable a rich preview for this content block type.",
-                            View = "views/propertyeditors/boolean/boolean.html"
-                        }
+                        //new ConfigurationField
+                        //{
+                        //    Key = "nameTemplate",
+                        //    Name = "Name template",
+                        //    Description = "Enter an AngularJS expression to evaluate against each block for its name.",
+                        //    View = "textstring",
+                        //},
+                        //new ConfigurationField
+                        //{
+                        //    Key = "overlaySize",
+                        //    Name = "Editor overlay size",
+                        //    Description = "Select the size of the overlay editing panel. By default this is set to 'small'. However if the editor fields require a wider panel, please select 'medium' or 'large'.",
+                        //    View = _ioHelper.ResolveRelativeOrVirtualUrl(RadioButtonListDataListEditor.DataEditorViewPath),
+                        //    Config = new Dictionary<string, object>
+                        //    {
+                        //        { Constants.Conventions.ConfigurationFieldAliases.Items, new[]
+                        //            {
+                        //                new DataListItem { Name = "Small", Value = "small" },
+                        //                new DataListItem { Name = "Medium", Value = "medium" },
+                        //                new DataListItem { Name = "Large", Value = "large" }
+                        //            }
+                        //        }
+                        //    }
+                        //},
+                        //new ConfigurationField
+                        //{
+                        //    Key = "enablePreview",
+                        //    Name = "Enable preview?",
+                        //    Description = "Select to enable a rich preview for this content block type.",
+                        //    View = "views/propertyeditors/boolean/boolean.html"
+                        //}
                     },
                     OverlaySize = OverlaySize.Medium,
                 }
